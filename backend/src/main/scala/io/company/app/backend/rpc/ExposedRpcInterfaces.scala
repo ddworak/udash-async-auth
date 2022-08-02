@@ -34,6 +34,7 @@ class ExposedRpcInterfaces(implicit domainServices: DomainServices, clientId: Cl
 
   override def auth(): AuthRPC = authEndpoint
 
+  //note how this validates the user
   override def secure(token: UserToken): SecureRPC = {
     authService
       .findUserCtx(token)

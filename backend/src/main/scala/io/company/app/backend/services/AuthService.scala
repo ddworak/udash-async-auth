@@ -1,41 +1,38 @@
 package io.company.app.backend.services
 
 import java.util.UUID
-
 import com.avsystem.commons._
 import io.company.app.shared.model.SharedExceptions
 import io.company.app.shared.model.auth.{Permission, UserContext, UserToken}
 
+import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Random
 
-class AuthService(usersData: JList[String]) {
-  // data is provided in configuration file
-  // every user is described by a separated string in format: <username>:<password>
-  private val usersWithPasswords: Map[String, String] =
-    usersData.asScala.map { data =>
-      val parts = data.split(':')
-      (parts(0), parts(1))
-    }.toMap
+final class ExternalIdentityProvider {
+  def auth(user: String, password: String): Future[UserContext] = {
+    //call DB here, assuming all users auth for simplicity
+    Future.successful(UserContext(
+      UserToken(UUID.randomUUID().toString),
+      "nameFromDb",
+      Permission.values.map(_.id).toSet,
+    ))
+  }
+}
 
-  private val tokens: MMap[UserToken, UserContext] = MMap.empty
+class AuthService(identityProvider: ExternalIdentityProvider) {
+
+  //could be a more complex cache with time-based invalidation etc.
+  private val tokens: ConcurrentHashMap[UserToken, UserContext] = new ConcurrentHashMap[UserToken, UserContext]()
 
   /** Tries to authenticate user with provided credentials. */
-  def login(username: String, password: String): Future[UserContext] = Future {
-    if (usersWithPasswords.contains(username) && usersWithPasswords(username) == password) {
-      val token = UserToken(UUID.randomUUID().toString)
-      val ctx = UserContext(
-        token, username,
-        // on every login user gets random set of permissions
-        Permission.values.iterator.filter(_ => Random.nextBoolean()).map(_.id).toSet
-      )
-
-      tokens.synchronized { tokens(token) = ctx }
-
-      ctx
-    } else throw SharedExceptions.UserNotFound()
-  }
+  def login(username: String, password: String): Future[UserContext] =
+    identityProvider.auth(username, password)
+      .andThenNow { case Success(ctx@UserContext(token, _, _)) => tokens.put(token, ctx) }
+      .recoverWithNow {
+        case t => throw SharedExceptions.UserNotFound()
+      }
 
   def findUserCtx(userToken: UserToken): Option[UserContext] =
-    tokens.synchronized { tokens.get(userToken) }
+    tokens.get(userToken).option
 }

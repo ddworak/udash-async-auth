@@ -1,10 +1,9 @@
 package io.company.app.backend
 
 import java.util.concurrent.TimeUnit
-
 import com.typesafe.config.{Config, ConfigFactory}
 import io.company.app.backend.server.ApplicationServer
-import io.company.app.backend.services.{AuthService, ChatService, DomainServices, RpcClientsService}
+import io.company.app.backend.services.{AuthService, ChatService, DomainServices, ExternalIdentityProvider, RpcClientsService}
 import io.udash.logging.CrossLogging
 
 import scala.io.StdIn
@@ -15,7 +14,7 @@ object Launcher extends CrossLogging {
 
     val config: Config = ConfigFactory.load()
     implicit val rpcClientsService: RpcClientsService = new RpcClientsService(RpcClientsService.defaultSendToClientFactory)
-    implicit val authService: AuthService = new AuthService(config.getStringList("auth.users"))
+    implicit val authService: AuthService = new AuthService(new ExternalIdentityProvider)
     implicit val chatService: ChatService = new ChatService(rpcClientsService)
     val server = new ApplicationServer(config.getInt("server.port"), config.getString("server.statics"), new DomainServices)
     server.start()
